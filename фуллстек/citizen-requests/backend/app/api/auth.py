@@ -1,21 +1,36 @@
 from fastapi import APIRouter, HTTPException
+from app.models.auth_models import RegisterModel, LoginModel, TokenResponse
 from app.db import crud
+from app.services.auth_service import hash_password, verify_password, create_access_token
 
 router = APIRouter()
 
-@router.post("/auth/register")
-async def register(payload: dict):
-    # payload: {"username": "...", "password": "..."}
-    if crud.find_user(payload["username"]):
-        raise HTTPException(status_code=400, detail="User exists")
-    user = {"id": len(crud._store["users"]) + 1, "username": payload["username"], "password": payload["password"]}
-    crud.add_user(user)
-    return {"ok": True}
+@router.post("/register")
+async def register(data: RegisterModel):
+    user = crud.find_user(data.username)
+    if user:
+        raise HTTPException(status_code=400, detail="Пользователь уже существует")
 
-@router.post("/auth/login")
-async def login(payload: dict):
-    u = crud.find_user(payload["username"])
-    if not u or u["password"] != payload["password"]:
-        raise HTTPException(status_code=401, detail="Invalid credentials")
-    # Для простоты возвращаем "fake token"
-    return {"access_token": f"token-for-{u['username']}", "token_type": "bearer"}
+    hashed = hash_password(data.password)
+
+    new_user = {
+        "id": len(crud._store["users"]) + 1,
+        "username": data.username,
+        "password": hashed,
+    }
+
+    crud.add_user(new_user)
+    return {"message": "Регистрация успешна"}
+
+@router.post("/login", response_model=TokenResponse)
+async def login(data: LoginModel):
+    user = crud.find_user(data.username)
+    if not user:
+        raise HTTPException(status_code=404, detail="Пользователь не найден")
+
+    if not verify_password(data.password, user["password"]):
+        raise HTTPException(status_code=400, detail="Неверный пароль")
+
+    token = create_access_token({"sub": user["username"]})
+
+    return TokenResponse(access_token=token)
