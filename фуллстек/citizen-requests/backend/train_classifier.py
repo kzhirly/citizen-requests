@@ -6,7 +6,6 @@ from sklearn.model_selection import train_test_split
 from joblib import dump
 import json
 
-# Простой тренировочный набор — расширяй по необходимости
 data = [
     ("Не работает лифт, подъезд в грязи", "ЖКХ"),
     ("Пропал автобус маршрута 12", "Транспорт"),
@@ -30,7 +29,7 @@ labels = [t[1] for t in data]
 # Pipeline: TFIDF + MultinomialNB
 pipeline = make_pipeline(TfidfVectorizer(ngram_range=(1,2), max_features=3000), MultinomialNB())
 
-# Для простоты — train_test_split, но можно обучить на всех данных
+
 X_train, X_test, y_train, y_test = train_test_split(texts, labels, test_size=0.2, random_state=42)
 
 pipeline.fit(X_train, y_train)

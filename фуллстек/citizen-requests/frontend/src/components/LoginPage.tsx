@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { loginUser } from "../api";
 
 type Page = 'home' | 'registration' | 'login' | 'history' | 'success';
 
@@ -17,16 +18,33 @@ export function LoginPage({ navigate, login }: LoginPageProps) {
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    // Mock login - in real app would validate credentials
-    // For now, just create a mock user
-    login({
-      firstName: 'Пользователь',
-      lastName: '',
-      phone: phone,
-    });
-  };
+
+
+const handleSubmit = async (e: React.FormEvent) => {
+  e.preventDefault();
+
+  const res = await loginUser(phone, password);
+  console.log("LOGIN RESPONSE:", res);
+
+  if (res.detail === "Invalid credentials") {
+    alert("Неверный логин или пароль!");
+    return;
+  }
+
+  if (!res.access_token) {
+    alert("Ошибка входа!");
+    return;
+  }
+
+  // сохраняем токен
+  localStorage.setItem("token", res.access_token);
+
+  login({
+    firstName: "Пользователь",
+    lastName: "",
+    phone: phone,
+  });
+};
 
   return (
     <div 

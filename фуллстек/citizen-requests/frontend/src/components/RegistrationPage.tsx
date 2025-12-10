@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { registerUser } from "../api";
 
 type Page = 'home' | 'registration' | 'login' | 'history' | 'success';
 
@@ -21,16 +22,30 @@ export function RegistrationPage({ navigate, login }: RegistrationPageProps) {
     password: '',
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    // Pass user data to login function
-    login({
-      firstName: formData.firstName,
-      lastName: formData.lastName,
-      phone: formData.phone,
-    });
-  };
 
+
+const handleSubmit = async (e: React.FormEvent) => {
+  e.preventDefault();
+
+  const res = await registerUser(formData.phone, formData.password);
+  console.log("REGISTER RESPONSE:", res);
+
+  if (res.detail === "User exists") {
+    alert("Такой пользователь уже есть!");
+    return;
+  }
+
+  if (!res.user_id) {
+    alert("Ошибка регистрации!");
+    return;
+  }
+
+  login({
+    firstName: formData.firstName,
+    lastName: formData.lastName,
+    phone: formData.phone,
+  });
+};
   const handleChange = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };

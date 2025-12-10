@@ -1,5 +1,4 @@
 from fastapi import APIRouter, HTTPException
-from fastapi.security import OAuth2PasswordRequestForm
 from app.db import crud
 from jose import jwt
 from datetime import datetime, timedelta
@@ -10,7 +9,6 @@ ALGO = "HS256"
 router = APIRouter()
 
 # ---------------- REGISTER ----------------
-
 @router.post("/register")
 def register(payload: dict):
     username = payload.get("username")
@@ -24,10 +22,9 @@ def register(payload: dict):
     if not created:
         raise HTTPException(status_code=400, detail="User exists")
 
-    return {"message": "User created"}
+    return {"message": "User created", "user_id": created["id"]}
 
 # ---------------- LOGIN ----------------
-
 @router.post("/login")
 def login(payload: dict):
     username = payload.get("username")

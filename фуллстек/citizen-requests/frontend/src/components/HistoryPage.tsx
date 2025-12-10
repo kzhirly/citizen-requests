@@ -1,5 +1,6 @@
 import { useState } from 'react';
 
+
 type Page = 'home' | 'registration' | 'login' | 'history' | 'success';
 
 interface UserData {
