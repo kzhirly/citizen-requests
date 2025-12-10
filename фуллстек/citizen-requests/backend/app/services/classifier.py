@@ -1,23 +1,20 @@
-# Простая rule-based "классификация" для ЛР2.
-# TODO: заменить реальной ML-модель в следующих работах.
+from joblib import load
+import os
 
-TOPICS_MAP = {
-    "жкх": "ЖКХ",
-    "лиф": "ЖКХ",
-    "вода": "ЖКХ",
-    "дорог": "Транспорт",
-    "дорога": "Транспорт",
-    "автобус": "Транспорт",
-    "школ": "Социальная сфера",
-    "сад": "Социальная сфера",
-    "парк": "Благоустройство",
-    "лавоч": "Благоустройство"
-}
+MODEL_PATH = os.path.join(
+    os.path.dirname(__file__),
+    "..",
+    "models",
+    "department_classifier.joblib"
+)
 
-def classify(text, title=None):
-    combined = (title or "") + " " + (text or "")
-    s = combined.lower()
-    for k, dept in TOPICS_MAP.items():
-        if k in s:
-            return dept
-    return "Другое"
+try:
+    model = load(MODEL_PATH)
+except:
+    model = None
+
+def classify(text, title=""):
+    if model is None:
+        return "other"
+    prediction = model.predict([title + " " + text])[0]
+    return prediction

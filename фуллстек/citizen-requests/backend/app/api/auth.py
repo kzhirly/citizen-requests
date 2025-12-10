@@ -1,36 +1,47 @@
 from fastapi import APIRouter, HTTPException
-from app.models.auth_models import RegisterModel, LoginModel, TokenResponse
+from fastapi.security import OAuth2PasswordRequestForm
 from app.db import crud
-from app.services.auth_service import hash_password, verify_password, create_access_token
+from jose import jwt
+from datetime import datetime, timedelta
+
+SECRET = "SUPERSECRET"
+ALGO = "HS256"
 
 router = APIRouter()
 
+# ---------------- REGISTER ----------------
+
 @router.post("/register")
-async def register(data: RegisterModel):
-    user = crud.find_user(data.username)
-    if user:
-        raise HTTPException(status_code=400, detail="Пользователь уже существует")
+def register(payload: dict):
+    username = payload.get("username")
+    password = payload.get("password")
 
-    hashed = hash_password(data.password)
+    if not username or not password:
+        raise HTTPException(status_code=400, detail="Missing fields")
 
-    new_user = {
-        "id": len(crud._store["users"]) + 1,
-        "username": data.username,
-        "password": hashed,
+    created = crud.create_user(username, password)
+
+    if not created:
+        raise HTTPException(status_code=400, detail="User exists")
+
+    return {"message": "User created"}
+
+# ---------------- LOGIN ----------------
+
+@router.post("/login")
+def login(payload: dict):
+    username = payload.get("username")
+    password = payload.get("password")
+
+    user = crud.verify_user(username, password)
+    if not user:
+        raise HTTPException(status_code=400, detail="Invalid credentials")
+
+    token_data = {
+        "sub": username,
+        "exp": datetime.utcnow() + timedelta(hours=8)
     }
 
-    crud.add_user(new_user)
-    return {"message": "Регистрация успешна"}
+    token = jwt.encode(token_data, SECRET, algorithm=ALGO)
 
-@router.post("/login", response_model=TokenResponse)
-async def login(data: LoginModel):
-    user = crud.find_user(data.username)
-    if not user:
-        raise HTTPException(status_code=404, detail="Пользователь не найден")
-
-    if not verify_password(data.password, user["password"]):
-        raise HTTPException(status_code=400, detail="Неверный пароль")
-
-    token = create_access_token({"sub": user["username"]})
-
-    return TokenResponse(access_token=token)
+    return {"access_token": token, "token_type": "bearer"}
