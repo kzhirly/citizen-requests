@@ -3,14 +3,19 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api import health, auth, requests_router
 from app.db.database import create_db_and_tables
 from app.api.secure.secure_routes import router as secure_router
-from app.middleware.jwt_middleware import verify_token
-
+# from app.middleware.jwt_middleware import verify_token  # временно отключено
 
 app = FastAPI(title="Citizen Requests API")
 
-app.middleware("http")(verify_token)
-create_db_and_tables()
+# создаем таблицы при старте
+@app.on_event("startup")
+def on_startup():
+    create_db_and_tables()
 
+# JWT middleware временно закомментировано, чтобы не падал Internal Server Error
+# app.middleware("http")(verify_token)
+
+# CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -19,6 +24,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Подключаем роутеры
 app.include_router(health.router, prefix="/api")
 app.include_router(auth.router, prefix="/api")
 app.include_router(requests_router.router, prefix="/api")

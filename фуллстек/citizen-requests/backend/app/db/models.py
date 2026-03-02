@@ -1,4 +1,3 @@
-# backend/app/db/models.py
 from sqlmodel import SQLModel, Field
 from typing import Optional
 from datetime import datetime
@@ -6,7 +5,8 @@ from datetime import datetime
 class User(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     username: str
-    password: str  
+    password: str
+    role: str = "guest"  # роли: guest, user, manager, admin
 
 class Request(SQLModel, table=True):
     request_id: Optional[int] = Field(default=None, primary_key=True)

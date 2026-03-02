@@ -1,97 +1,23 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends
+from app.db.database import get_session
 from app.db import crud
-from app.services import classifier
-from datetime import datetime
+from app.api.deps import role_required
 
 router = APIRouter()
 
-
-# ------------------ CREATE ------------------
+@router.get("/requests")
+def list_requests(user=Depends(role_required(["guest","user","manager","admin"])), db=Depends(get_session)):
+    return crud.get_all_requests(db)
 
 @router.post("/requests")
-async def create_request(payload: dict):
-    new_id = len(crud.list_requests()) + 1
+def create_request(payload: dict, user=Depends(role_required(["user","manager","admin"])), db=Depends(get_session)):
+    payload["full_name"] = user["username"]
+    return crud.create_request(db, payload)
 
-    assigned = classifier.classify(
-        payload.get("description", ""),
-        payload.get("title", "")
-    )
+@router.put("/requests/{id}")
+def edit_request(id: int, payload: dict, user=Depends(role_required(["user","manager","admin"])), db=Depends(get_session)):
+    return crud.update_request(db, id, payload, user)
 
-    item = {
-        "request_id": new_id,
-        "full_name": payload.get("full_name"),
-        "contact": payload.get("contact"),
-        "topic": payload.get("topic"),
-        "title": payload.get("title"),
-        "description": payload.get("description"),
-        "assigned_department": assigned,
-        "status": "new",
-        "created_at": datetime.utcnow().isoformat(),
-        "response": None
-    }
-
-    crud.add_request(item)
-    return {"request_id": new_id, "assigned_department": assigned, "status": "created"}
-
-
-# ------------------ READ LIST ------------------
-
-@router.get("/requests")
-async def list_requests(topic: str = None, assigned_department: str = None,
-                        status: str = None, date_from: str = None, date_to: str = None):
-    items = crud.list_requests()
-
-    if topic:
-        items = [i for i in items if i.get("topic") == topic]
-    if assigned_department:
-        items = [i for i in items if i.get("assigned_department") == assigned_department]
-    if status:
-        items = [i for i in items if i.get("status") == status]
-    if date_from:
-        items = [i for i in items if i.get("created_at") >= date_from]
-    if date_to:
-        items = [i for i in items if i.get("created_at") <= date_to]
-
-    return {"items": items, "total": len(items)}
-
-
-# ------------------ READ ONE ------------------
-
-@router.get("/requests/{request_id}")
-async def get_request(request_id: int):
-    item = crud.get_request_by_id(request_id)
-    if not item:
-        raise HTTPException(status_code=404, detail="Not found")
-    return item
-
-
-# ------------------ UPDATE ------------------
-
-@router.put("/requests/{request_id}")
-async def update_request(request_id: int, payload: dict):
-    allowed = {"status", "response"}
-
-    # фильтруем только разрешённые ключи
-    updates = {key: value for key, value in payload.items() if key in allowed}
-
-    if not updates:
-        raise HTTPException(status_code=400, detail="Nothing to update")
-
-    item = crud.update_request(request_id, updates)
-
-    if not item:
-        raise HTTPException(status_code=404, detail="Not found")
-
-    return {"updated": item}
-
-
-# ------------------ DELETE ------------------
-
-@router.delete("/requests/{request_id}")
-async def remove_request(request_id: int):
-    deleted = crud.delete_request(request_id)
-
-    if not deleted:
-        raise HTTPException(status_code=404, detail="Not found")
-
-    return {"deleted": True, "request_id": request_id}
+@router.patch("/requests/{id}/close")
+def close_request(id: int, user=Depends(role_required(["manager","admin"])), db=Depends(get_session)):
+    return crud.close_request(db, id)

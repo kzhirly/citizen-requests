@@ -4,6 +4,7 @@ interface UserData {
   firstName: string;
   lastName: string;
   phone: string;
+  role: string;
 }
 
 interface SuccessPageProps {

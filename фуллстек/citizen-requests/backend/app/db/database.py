@@ -1,4 +1,3 @@
-# backend/app/db/database.py
 from sqlmodel import create_engine, SQLModel, Session
 from pathlib import Path
 
@@ -12,4 +11,6 @@ def create_db_and_tables():
     SQLModel.metadata.create_all(engine)
 
 def get_session():
-    return Session(engine)
+    # Важно: session через with, FastAPI сам управляет
+    with Session(engine) as session:
+        yield session
