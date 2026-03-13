@@ -1,9 +1,14 @@
+# app/api/health.py
 from fastapi import APIRouter
-from app.db import crud
+from app.db.database import engine
 
 router = APIRouter()
 
 @router.get("/health")
 async def health_check():
-    db_ok = crud.ping()
-    return {"status": "ok" if db_ok else "error", "db": "ok" if db_ok else "error"}
+    try:
+        with engine.connect() as conn:
+            conn.execute("SELECT 1")
+        return {"status": "ok", "db": "ok"}
+    except:
+        return {"status": "error", "db": "error"}

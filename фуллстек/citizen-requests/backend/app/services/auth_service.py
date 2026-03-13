@@ -1,21 +1,31 @@
-from datetime import datetime, timedelta
-from jose import jwt
-from passlib.context import CryptContext
+# app/services/auth_service.py
+from datetime import timedelta
+from sqlmodel import Session
+from app.core import security
+from app.db import crud
 
-SECRET_KEY = "supersecretkey123"  # для учебы можно так
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60
+def authenticate_user(db: Session, username: str, password: str):
+    user = crud.get_user_by_username(db, username)
+    if not user:
+        return None
+    if not security.verify_password(password, user.password):
+        return None
+    return user
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+def create_tokens_for_user(user):
+    access_token = security.create_access_token({"sub": user.username, "role": user.role})
+    refresh_token = security.create_refresh_token({"sub": user.username})
+    return access_token, refresh_token
 
-def hash_password(password: str):
-    return pwd_context.hash(password)
-
-def verify_password(password: str, hashed: str):
-    return pwd_context.verify(password, hashed)
-
-def create_access_token(data: dict):
-    to_encode = data.copy()
-    expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    to_encode.update({"exp": expire})
-    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+def verify_refresh_token(db: Session, token: str):
+    payload = security.decode_token(token)
+    if not payload or payload.get("type") != "refresh":
+        return None
+    username = payload.get("sub")
+    if not username:
+        return None
+    stored = crud.get_refresh_token(db, token)
+    if not stored:
+        return None
+    user = crud.get_user_by_username(db, username)
+    return user
