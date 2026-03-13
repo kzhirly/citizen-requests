@@ -1,3 +1,4 @@
+//SuccessPage.tsx
 type Page = 'home' | 'registration' | 'login' | 'history' | 'success';
 
 interface UserData {
