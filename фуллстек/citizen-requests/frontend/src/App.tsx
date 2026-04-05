@@ -1,3 +1,5 @@
+// frontend/src/App.tsx
+
 import { useState, useEffect } from 'react';
 import { HomePage } from './components/HomePage';
 import { RegistrationPage } from './components/RegistrationPage';
@@ -5,6 +7,7 @@ import { LoginPage } from './components/LoginPage';
 import { HistoryPage } from './components/HistoryPage';
 import { SuccessPage } from './components/SuccessPage';
 import { ProtectedRoute } from './components/ProtectedRoute';
+import { clearTokens, getAccessToken } from './api';
 
 type Page = 'home' | 'registration' | 'login' | 'history' | 'success';
 
@@ -22,9 +25,22 @@ export default function App() {
   const [userData, setUserData] = useState<UserData | null>(null);
   const [role, setRole] = useState<string | null>(localStorage.getItem('role'));
 
+  // Слушаем событие принудительного выхода (при ошибке refresh токена)
+  useEffect(() => {
+    const handleAuthLogout = () => {
+      logout();
+    };
+    
+    window.addEventListener('auth:logout', handleAuthLogout);
+    
+    return () => {
+      window.removeEventListener('auth:logout', handleAuthLogout);
+    };
+  }, []);
+
   // Восстанавливаем сессию при загрузке
   useEffect(() => {
-    const token = localStorage.getItem('token');
+    const token = getAccessToken();
     const savedRole = localStorage.getItem('role');
     const firstName = localStorage.getItem('firstName');
     const lastName = localStorage.getItem('lastName');
@@ -76,7 +92,7 @@ export default function App() {
     setUserData(null);
     setRole(null);
     setIsAuthenticated(false);
-    localStorage.removeItem('token');
+    clearTokens();
     localStorage.removeItem('role');
     localStorage.removeItem('firstName');
     localStorage.removeItem('lastName');

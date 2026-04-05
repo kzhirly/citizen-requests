@@ -166,6 +166,37 @@ export function HomePage({ navigate, isAuthenticated, userData, logout, role }: 
             required
             disabled={isSubmitting}
           />
+
+      {/* ЗАГРУЗКА ФАЙЛОВ ===== */}
+      <div className="mb-4">
+        <label className="block text-gray-700 mb-2 text-sm font-medium">
+          📎 Прикрепить файл (необязательно)
+        </label>
+        <input
+          type="file"
+          accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) {
+              // Проверка размера (максимум 5 МБ)
+              if (file.size > 5 * 1024 * 1024) {
+                alert('Файл слишком большой! Максимальный размер 5 МБ');
+                e.target.value = '';
+                return;
+              }
+              console.log('Файл выбран:', file.name);
+              // Здесь позже добавим логику загрузки файла
+            }
+          }}
+          className="w-full text-gray-700 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer"
+        />
+        <p className="text-xs text-gray-500 mt-1">
+          Допустимые форматы: PDF, JPG, PNG, DOC. Максимум 5 МБ
+        </p>
+      </div>
+      {/* ===== КОНЕЦ БЛОКА ===== */}
+
+
           <button 
             type="submit"
             disabled={isSubmitting}

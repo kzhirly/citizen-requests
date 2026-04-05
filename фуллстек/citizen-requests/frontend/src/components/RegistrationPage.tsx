@@ -1,4 +1,5 @@
-//RegistrationPage.tsx
+// frontend/src/components/RegistrationPage.tsx
+
 import { useState } from 'react';
 import { registerUser, loginUser } from "../api";
 import { jwtDecode } from "jwt-decode";
@@ -24,86 +25,85 @@ export function RegistrationPage({ navigate, login }: RegistrationPageProps) {
     phone: '',
     password: '',
   });
-  const [isLoading, setIsLoading] = useState(false); // ✅ было определено
+  const [isLoading, setIsLoading] = useState(false);
 
   const handleChange = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
-  e.preventDefault();
-  setIsLoading(true);
+    e.preventDefault();
+    setIsLoading(true);
 
-  try {
-    // 1. Регистрируем пользователя
-    const regRes = await registerUser(formData.phone, formData.password);
-    
-    if (regRes.detail === "User exists") {
-      alert("Такой пользователь уже есть!");
+    try {
+      // 1. Регистрируем пользователя
+      const regRes = await registerUser(formData.phone, formData.password);
+      
+      if (regRes.detail === "User exists") {
+        alert("Такой пользователь уже есть!");
+        setIsLoading(false);
+        return;
+      }
+
+      if (!regRes.user_id && !regRes.id) {
+        alert("Ошибка регистрации!");
+        setIsLoading(false);
+        return;
+      }
+
+      // 2. Сразу логинимся, чтобы получить токены (access + refresh)
+      const loginRes = await loginUser(formData.phone, formData.password);
+      
+      if (!loginRes.access_token) {
+        alert("Ошибка автоматического входа после регистрации");
+        setIsLoading(false);
+        return;
+      }
+
+      // 3. Декодируем токен, получаем реальную роль
+      const decoded: any = jwtDecode(loginRes.access_token);
+      const role = decoded.role;
+
+      // 4. Сохраняем данные пользователя
+      localStorage.setItem('role', role);
+      localStorage.setItem('firstName', formData.firstName);
+      localStorage.setItem('lastName', formData.lastName);
+      localStorage.setItem('phone', formData.phone);
+      localStorage.setItem('userId', regRes.user_id || regRes.id);
+
+      // 5. Обновляем список в localStorage (для админ-панели)
+      const existingUsers = JSON.parse(localStorage.getItem('registered_users') || '[]');
+      existingUsers.push({
+        id: regRes.user_id || regRes.id,
+        phone: formData.phone,
+        role: role,
+        registeredAt: new Date().toISOString(),
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+      });
+      localStorage.setItem('registered_users', JSON.stringify(existingUsers));
+
+      // 6. Сообщаем, если роль admin
+      if (role === 'admin') {
+        alert("🎉 Вы первый пользователь! Вам назначена роль администратора.");
+      }
+
+      // 7. Вызываем login из пропсов
+      login({
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+        phone: formData.phone,
+        role: role,
+      });
+
+      navigate('home');
+    } catch (error) {
+      console.error("Registration error:", error);
+      alert("Ошибка при регистрации");
+    } finally {
       setIsLoading(false);
-      return;
     }
-
-    if (!regRes.user_id && !regRes.id) {
-      alert("Ошибка регистрации!");
-      setIsLoading(false);
-      return;
-    }
-
-    // 2. Сразу логинимся, чтобы получить токен с правильной ролью
-    const loginRes = await loginUser(formData.phone, formData.password);
-    
-    if (!loginRes.access_token) {
-      alert("Ошибка автоматического входа после регистрации");
-      setIsLoading(false);
-      return;
-    }
-
-    // 3. Декодируем токен, получаем реальную роль
-    const decoded: any = jwtDecode(loginRes.access_token);
-    const role = decoded.role; // роль от бэкенда
-
-    // 4. Сохраняем данные
-    localStorage.setItem('token', loginRes.access_token);
-    localStorage.setItem('role', role);
-    localStorage.setItem('firstName', formData.firstName);
-    localStorage.setItem('lastName', formData.lastName);
-    localStorage.setItem('phone', formData.phone);
-    localStorage.setItem('userId', regRes.user_id || regRes.id);
-
-    // 5. Обновляем список в localStorage (для админ-панели)
-    const existingUsers = JSON.parse(localStorage.getItem('registered_users') || '[]');
-    existingUsers.push({
-      id: regRes.user_id || regRes.id,
-      phone: formData.phone,
-      role: role,
-      registeredAt: new Date().toISOString(),
-      firstName: formData.firstName,
-      lastName: formData.lastName,
-    });
-    localStorage.setItem('registered_users', JSON.stringify(existingUsers));
-
-    // 6. Сообщаем, если роль admin
-    if (role === 'admin') {
-      alert("🎉 Вы первый пользователь! Вам назначена роль администратора.");
-    }
-
-    // 7. Вызываем login из пропсов
-    login({
-      firstName: formData.firstName,
-      lastName: formData.lastName,
-      phone: formData.phone,
-      role: role,
-    });
-
-    navigate('home');
-  } catch (error) {
-    console.error("Registration error:", error);
-    alert("Ошибка при регистрации");
-  } finally {
-    setIsLoading(false);
-  }
-};
+  };
 
   return (
     <div 
@@ -123,7 +123,6 @@ export function RegistrationPage({ navigate, login }: RegistrationPageProps) {
             </h1>
 
             <form onSubmit={handleSubmit} className="space-y-5">
-              {/* Имя */}
               <div className="animate-slideRight" style={{ animationDelay: '0.1s' }}>
                 <label className="block mb-2 text-gray-700">Имя</label>
                 <input
@@ -133,10 +132,10 @@ export function RegistrationPage({ navigate, login }: RegistrationPageProps) {
                   onChange={(e) => handleChange('firstName', e.target.value)}
                   className="w-full pl-3 pr-4 py-3 bg-white border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200 transition-all"
                   required
+                  disabled={isLoading}
                 />
               </div>
 
-              {/* Фамилия */}
               <div className="animate-slideRight" style={{ animationDelay: '0.2s' }}>
                 <label className="block mb-2 text-gray-700">Фамилия</label>
                 <input
@@ -146,10 +145,10 @@ export function RegistrationPage({ navigate, login }: RegistrationPageProps) {
                   onChange={(e) => handleChange('lastName', e.target.value)}
                   className="w-full pl-3 pr-4 py-3 bg-white border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200 transition-all"
                   required
+                  disabled={isLoading}
                 />
               </div>
 
-              {/* Телефон */}
               <div className="animate-slideRight" style={{ animationDelay: '0.3s' }}>
                 <label className="block mb-2 text-gray-700">Номер телефона</label>
                 <input
@@ -159,10 +158,10 @@ export function RegistrationPage({ navigate, login }: RegistrationPageProps) {
                   onChange={(e) => handleChange('phone', e.target.value)}
                   className="w-full pl-3 pr-4 py-3 bg-white border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200 transition-all"
                   required
+                  disabled={isLoading}
                 />
               </div>
 
-              {/* Пароль */}
               <div className="animate-slideRight" style={{ animationDelay: '0.4s' }}>
                 <label className="block mb-2 text-gray-700">Пароль</label>
                 <input
@@ -172,10 +171,10 @@ export function RegistrationPage({ navigate, login }: RegistrationPageProps) {
                   onChange={(e) => handleChange('password', e.target.value)}
                   className="w-full pl-3 pr-4 py-3 bg-white border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200 transition-all"
                   required
+                  disabled={isLoading}
                 />
               </div>
 
-              {/* Информация о ролях */}
               <div className="bg-blue-50 p-4 rounded-lg animate-fadeIn" style={{ animationDelay: '0.5s' }}>
                 <p className="text-sm text-blue-800">
                   <span className="font-bold">ℹ️ Как назначаются роли:</span>
@@ -188,7 +187,6 @@ export function RegistrationPage({ navigate, login }: RegistrationPageProps) {
                 </p>
               </div>
 
-              {/* Вход если уже есть аккаунт */}
               <p className="text-center text-sm text-gray-600 animate-fadeIn" style={{ animationDelay: '0.6s' }}>
                 Уже есть аккаунт?{' '}
                 <button 
@@ -200,14 +198,23 @@ export function RegistrationPage({ navigate, login }: RegistrationPageProps) {
                 </button>
               </p>
 
-              {/* Кнопка регистрации */}
               <button 
                 type="submit"
                 disabled={isLoading}
                 className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white rounded-xl py-3 px-6 transition-all shadow-lg hover:shadow-xl hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center gap-2 animate-fadeIn disabled:opacity-50 disabled:cursor-not-allowed"
                 style={{ animationDelay: '0.7s' }}
               >
-                {isLoading ? 'Регистрация...' : 'Зарегистрироваться'}
+                {isLoading ? (
+                  <span className="flex items-center gap-2">
+                    <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Регистрация...
+                  </span>
+                ) : (
+                  'Зарегистрироваться'
+                )}
               </button>
             </form>
           </div>

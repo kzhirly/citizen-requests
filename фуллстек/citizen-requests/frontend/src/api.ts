@@ -1,5 +1,31 @@
-// api.ts
+// frontend/src/api.ts
+
 const API_URL = "http://127.0.0.1:8000/api";
+
+// Хранение токенов
+let accessToken: string | null = localStorage.getItem('token');
+let refreshToken: string | null = localStorage.getItem('refresh_token');
+
+// Обновить токены в памяти и localStorage
+function setTokens(access: string, refresh: string) {
+  accessToken = access;
+  refreshToken = refresh;
+  localStorage.setItem('token', access);
+  localStorage.setItem('refresh_token', refresh);
+}
+
+// Очистить токены
+export function clearTokens() {
+  accessToken = null;
+  refreshToken = null;
+  localStorage.removeItem('token');
+  localStorage.removeItem('refresh_token');
+}
+
+// Получить access token (для заголовков)
+export function getAccessToken() {
+  return accessToken;
+}
 
 // --- REGISTRATION ---
 export async function registerUser(username: string, password: string, role?: string) {
@@ -20,7 +46,7 @@ export async function registerUser(username: string, password: string, role?: st
   }
 }
 
-// --- LOGIN ---
+// --- LOGIN (сохраняем оба токена) ---
 export async function loginUser(username: string, password: string) {
   try {
     const res = await fetch(`${API_URL}/login`, {
@@ -28,31 +54,126 @@ export async function loginUser(username: string, password: string) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username, password }),
     });
-    return await res.json();
+    const data = await res.json();
+    
+    if (data.access_token && data.refresh_token) {
+      setTokens(data.access_token, data.refresh_token);
+    }
+    
+    return data;
   } catch (e) {
     console.error("Login error:", e);
     return { error: true };
   }
 }
 
+// --- REFRESH TOKEN (обновление access токена) ---
+export async function refreshAccessToken(): Promise<string | null> {
+  if (!refreshToken) {
+    return null;
+  }
+
+  try {
+    const res = await fetch(`${API_URL}/refresh`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refresh_token: refreshToken }),
+    });
+    
+    const data = await res.json();
+    
+    if (data.access_token && data.refresh_token) {
+      setTokens(data.access_token, data.refresh_token);
+      return data.access_token;
+    }
+    
+    // Если refresh token невалидный - очищаем всё
+    clearTokens();
+    return null;
+  } catch (e) {
+    console.error("Refresh token error:", e);
+    clearTokens();
+    return null;
+  }
+}
+
+// --- LOGOUT (отзываем refresh токен) ---
+export async function logoutUser() {
+  if (refreshToken) {
+    try {
+      await fetch(`${API_URL}/logout`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refresh_token: refreshToken }),
+      });
+    } catch (e) {
+      console.error("Logout error:", e);
+    }
+  }
+  clearTokens();
+}
+
+// --- Функция для авторизованных запросов с автоматическим обновлением токена ---
+async function fetchWithAuth(url: string, options: RequestInit = {}): Promise<Response> {
+  // Функция для выполнения запроса с текущим токеном
+  const makeRequest = async (token: string | null) => {
+    // Создаем базовые заголовки с правильной типизацией
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+    
+    // Добавляем существующие заголовки из options
+    if (options.headers) {
+      const existingHeaders = options.headers as Record<string, string>;
+      Object.entries(existingHeaders).forEach(([key, value]) => {
+        headers[key] = value;
+      });
+    }
+    
+    // Добавляем Authorization если есть токен
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+    
+    return fetch(url, {
+      ...options,
+      headers,
+    });
+  };
+
+  // Пробуем выполнить запрос с текущим access токеном
+  let response = await makeRequest(accessToken);
+  
+  // Если 401 Unauthorized - пробуем обновить токен
+  if (response.status === 401 && refreshToken) {
+    const newToken = await refreshAccessToken();
+    
+    if (newToken) {
+      // Повторяем запрос с новым токеном
+      response = await makeRequest(newToken);
+    } else {
+      // Не удалось обновить - очищаем и редиректим на логин
+      clearTokens();
+      window.dispatchEvent(new CustomEvent('auth:logout'));
+    }
+  }
+  
+  return response;
+}
+
 // --- CREATE REQUEST (POST /api/requests) ---
 export async function createRequest(description: string) {
   try {
-    const token = localStorage.getItem('token');
-    const res = await fetch(`${API_URL}/requests`, {
+    const response = await fetchWithAuth(`${API_URL}/requests`, {
       method: "POST",
-      headers: { 
-        "Authorization": `Bearer ${token}`,
-        "Content-Type": "application/json" 
-      },
       body: JSON.stringify({ description }),
     });
     
-    if (!res.ok) {
-      throw new Error(`HTTP error! status: ${res.status}`);
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
     }
     
-    return await res.json();
+    return await response.json();
   } catch (e) {
     console.error("Create request error:", e);
     return { error: true };
@@ -62,20 +183,15 @@ export async function createRequest(description: string) {
 // --- GET ALL REQUESTS (GET /api/requests) ---
 export async function getRequests() {
   try {
-    const token = localStorage.getItem('token');
-    const res = await fetch(`${API_URL}/requests`, {
+    const response = await fetchWithAuth(`${API_URL}/requests`, {
       method: "GET",
-      headers: { 
-        "Authorization": `Bearer ${token}`,
-        "Content-Type": "application/json" 
-      },
     });
     
-    if (!res.ok) {
-      throw new Error(`HTTP error! status: ${res.status}`);
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
     }
     
-    return await res.json();
+    return await response.json();
   } catch (e) {
     console.error("Get requests error:", e);
     return [];
@@ -85,17 +201,12 @@ export async function getRequests() {
 // --- UPDATE REQUEST (PUT /api/requests/{id}) ---
 export async function updateRequest(id: string, description: string) {
   try {
-    const token = localStorage.getItem('token');
-    const res = await fetch(`${API_URL}/requests/${id}`, {
+    const response = await fetchWithAuth(`${API_URL}/requests/${id}`, {
       method: "PUT",
-      headers: { 
-        "Authorization": `Bearer ${token}`,
-        "Content-Type": "application/json" 
-      },
       body: JSON.stringify({ description }),
     });
     
-    return await res.json();
+    return await response.json();
   } catch (e) {
     console.error("Update request error:", e);
     return { error: true };
@@ -105,16 +216,11 @@ export async function updateRequest(id: string, description: string) {
 // --- CLOSE REQUEST (PATCH /api/requests/{id}/close) ---
 export async function closeRequest(id: string) {
   try {
-    const token = localStorage.getItem('token');
-    const res = await fetch(`${API_URL}/requests/${id}/close`, {
+    const response = await fetchWithAuth(`${API_URL}/requests/${id}/close`, {
       method: "PATCH",
-      headers: { 
-        "Authorization": `Bearer ${token}`,
-        "Content-Type": "application/json" 
-      },
     });
     
-    return await res.json();
+    return await response.json();
   } catch (e) {
     console.error("Close request error:", e);
     return { error: true };
@@ -124,17 +230,12 @@ export async function closeRequest(id: string) {
 // --- UPDATE USER ROLE (PUT /api/users/{user_id}/role) ---
 export async function updateUserRole(userId: string, newRole: string) {
   try {
-    const token = localStorage.getItem('token');
-    const res = await fetch(`${API_URL}/users/${userId}/role`, {
+    const response = await fetchWithAuth(`${API_URL}/users/${userId}/role`, {
       method: "PUT",
-      headers: { 
-        "Authorization": `Bearer ${token}`,
-        "Content-Type": "application/json" 
-      },
       body: JSON.stringify({ role: newRole }),
     });
     
-    return await res.json();
+    return await response.json();
   } catch (e) {
     console.error("Update role error:", e);
     return { error: true };
@@ -144,16 +245,11 @@ export async function updateUserRole(userId: string, newRole: string) {
 // --- GET PROFILE (GET /api/secure/profile) ---
 export async function getProfile() {
   try {
-    const token = localStorage.getItem('token');
-    const res = await fetch(`${API_URL}/secure/profile`, {
+    const response = await fetchWithAuth(`${API_URL}/secure/profile`, {
       method: "GET",
-      headers: { 
-        "Authorization": `Bearer ${token}`,
-        "Content-Type": "application/json" 
-      },
     });
     
-    return await res.json();
+    return await response.json();
   } catch (e) {
     console.error("Get profile error:", e);
     return null;
@@ -200,4 +296,44 @@ export function saveUserRegistration(phone: string, role: string): void {
 
 export function isFirstUser(): boolean {
   return getRegisteredUsers().length === 0;
+}
+
+
+// --- ЗАГРУЗКА ФАЙЛОВ (для 3-й лабораторной) ---
+export async function uploadFile(requestId: string, file: File) {
+  try {
+    const token = getAccessToken();
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    const response = await fetch(`${API_URL}/requests/${requestId}/files`, {
+      method: "POST",
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+      body: formData,
+    });
+    
+    return await response.json();
+  } catch (e) {
+    console.error("Upload file error:", e);
+    return { error: true };
+  }
+}
+
+export async function getFiles(requestId: string) {
+  try {
+    const token = getAccessToken();
+    const response = await fetch(`${API_URL}/requests/${requestId}/files`, {
+      method: "GET",
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+    });
+    
+    return await response.json();
+  } catch (e) {
+    console.error("Get files error:", e);
+    return [];
+  }
 }
