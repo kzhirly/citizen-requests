@@ -161,12 +161,17 @@ async function fetchWithAuth(url: string, options: RequestInit = {}): Promise<Re
   return response;
 }
 
-// --- CREATE REQUEST (POST /api/requests) ---
-export async function createRequest(description: string) {
+// frontend/src/api.ts - найти функцию createRequest и ЗАМЕНИТЬ её на эту
+
+export async function createRequest(description: string, title?: string, topic?: string) {
   try {
     const response = await fetchWithAuth(`${API_URL}/requests`, {
       method: "POST",
-      body: JSON.stringify({ description }),
+      body: JSON.stringify({ 
+        description: description,
+        title: title || description.slice(0, 50),  // если нет заголовка, берем первые 50 символов
+        topic: topic || "Обращение гражданина"
+      }),
     });
     
     if (!response.ok) {

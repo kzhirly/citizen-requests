@@ -54,29 +54,33 @@ export function HomePage({ navigate, isAuthenticated, userData, logout, role }: 
   const currentRole = !isAuthenticated ? 'guest' : (role || userData?.role || 'guest');
   const userPermissions = permissions[currentRole as keyof typeof permissions] || permissions.guest;
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!userPermissions.canCreateAppeal) {
-      alert('У вас нет прав для создания обращений');
-      return;
+const handleSubmit = async (e: React.FormEvent) => {
+  e.preventDefault();
+  if (!userPermissions.canCreateAppeal) {
+    alert('У вас нет прав для создания обращений');
+    return;
+  }
+  
+  if (appeal.trim()) {
+    setIsSubmitting(true);
+    try {
+      // Вызов API для создания обращения (передаем текст)
+      const result = await createRequest(appeal, appeal.slice(0, 50), "Обращение гражданина");
+      console.log('Обращение создано:', result);
+      
+      // Получаем назначенный отдел из ответа сервера
+      const assignedDept = result.assigned_department || 'Общий отдел';
+      
+      setAppeal('');
+      navigate('success', assignedDept);
+    } catch (error) {
+      console.error('Ошибка при создании обращения:', error);
+      alert('Ошибка при создании обращения');
+    } finally {
+      setIsSubmitting(false);
     }
-    
-    if (appeal.trim()) {
-      setIsSubmitting(true);
-      try {
-        // Вызов API для создания обращения
-        const result = await createRequest(appeal);
-        console.log('Обращение создано:', result);
-        setAppeal('');
-        navigate('success', 'Общий отдел обращений');
-      } catch (error) {
-        console.error('Ошибка при создании обращения:', error);
-        alert('Ошибка при создании обращения');
-      } finally {
-        setIsSubmitting(false);
-      }
-    }
-  };
+  }
+};
 
   // Определяем приветствие в зависимости от роли
   const getGreeting = () => {
