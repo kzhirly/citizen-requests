@@ -98,3 +98,8 @@ def close_request(db: Session, id: int):
         db.commit()
     return req
 
+# backend/app/db/crud.py (добавить в конец файла)
+
+def get_request_by_id(db: Session, request_id: int):
+    """Получить обращение по ID"""
+    return db.query(Request).filter(Request.request_id == request_id).first()

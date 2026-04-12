@@ -1,7 +1,8 @@
-// HomePage.tsx
+// frontend/src/components/HomePage.tsx
+
 import { useState } from 'react';
 import { AdminPanel } from './AdminPanel';
-import { createRequest } from '../api';
+import { createRequest, uploadFile } from '../api';
 
 type Page = 'home' | 'registration' | 'login' | 'history' | 'success';
 
@@ -47,55 +48,59 @@ const permissions = {
 
 export function HomePage({ navigate, isAuthenticated, userData, logout, role }: HomePageProps) {
   const [appeal, setAppeal] = useState('');
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);  // <-- ДОБАВИТЬ ЭТУ СТРОКУ
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
   
-  // Определяем текущую роль (если не аутентифицирован, то гость)
+  // Определяем текущую роль
   const currentRole = !isAuthenticated ? 'guest' : (role || userData?.role || 'guest');
   const userPermissions = permissions[currentRole as keyof typeof permissions] || permissions.guest;
 
-const handleSubmit = async (e: React.FormEvent) => {
-  e.preventDefault();
-  if (!userPermissions.canCreateAppeal) {
-    alert('У вас нет прав для создания обращений');
-    return;
-  }
-  
-  if (appeal.trim()) {
-    setIsSubmitting(true);
-    try {
-      // Вызов API для создания обращения (передаем текст)
-      const result = await createRequest(appeal, appeal.slice(0, 50), "Обращение гражданина");
-      console.log('Обращение создано:', result);
-      
-      // Получаем назначенный отдел из ответа сервера
-      const assignedDept = result.assigned_department || 'Общий отдел';
-      
-      setAppeal('');
-      navigate('success', assignedDept);
-    } catch (error) {
-      console.error('Ошибка при создании обращения:', error);
-      alert('Ошибка при создании обращения');
-    } finally {
-      setIsSubmitting(false);
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!userPermissions.canCreateAppeal) {
+      alert('У вас нет прав для создания обращений');
+      return;
     }
-  }
-};
+    
+    if (appeal.trim()) {
+      setIsSubmitting(true);
+      try {
+        // 1. Сначала создаем обращение
+        const result = await createRequest(appeal, appeal.slice(0, 50), "Обращение гражданина");
+        console.log('Обращение создано:', result);
+        
+        // 2. Если есть файл и обращение создалось успешно - загружаем файл
+        if (selectedFile && result.request_id) {
+          const uploadResult = await uploadFile(result.request_id.toString(), selectedFile);
+          if (uploadResult.error) {
+            console.error('Ошибка загрузки файла:', uploadResult);
+            alert(`Внимание: обращение создано, но файл не загрузился: ${uploadResult.message || 'неизвестная ошибка'}`);
+          } else {
+            console.log('Файл загружен:', uploadResult);
+            alert('✅ Обращение и файл успешно загружены!');
+          }
+        }
+        
+        // Получаем назначенный отдел из ответа сервера
+        const assignedDept = result.assigned_department || 'Общий отдел';
+        
+        setAppeal('');
+        setSelectedFile(null);  // очищаем выбранный файл
+        navigate('success', assignedDept);
+      } catch (error) {
+        console.error('Ошибка при создании обращения:', error);
+        alert('Ошибка при создании обращения');
+      } finally {
+        setIsSubmitting(false);
+      }
+    }
+  };
 
-  // Определяем приветствие в зависимости от роли
+  // Определяем приветствие
   const getGreeting = () => {
     if (!isAuthenticated) return '';
-    
-    switch(currentRole) {
-      case 'admin':
-        return `Здравствуйте, `;
-      case 'user':
-        return `Здравствуйте, `;
-      case 'guest':
-        return `Здравствуйте, `;
-      default:
-        return `Здравствуйте, `;
-    }
+    return `Здравствуйте, `;
   };
 
   return (
@@ -156,108 +161,99 @@ const handleSubmit = async (e: React.FormEvent) => {
                   : 'У вас ограниченный доступ к системе :('}
             </p>
 
-{isAuthenticated ? (
-  <>
-    {/* Форма создания обращения - только для user и admin */}
-    {userPermissions.canCreateAppeal && (
-      <div className="flex justify-center">
-        <form onSubmit={handleSubmit} className="mb-6 w-full max-w-md">
-          <textarea
-            value={appeal}
-            onChange={(e) => setAppeal(e.target.value)}
-            placeholder="Опишите вашу проблему..."
-            className="w-full min-h-[200px] mb-4 bg-white border-2 border-gray-200 rounded-xl p-4 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200 transition-all resize-none text-gray-700"
-            required
-            disabled={isSubmitting}
-          />
-
-      {/* ЗАГРУЗКА ФАЙЛОВ ===== */}
-      <div className="mb-4">
-        <label className="block text-gray-700 mb-2 text-sm font-medium">
-          📎 Прикрепить файл (необязательно)
-        </label>
-        <input
-          type="file"
-          accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
-          onChange={(e) => {
-            const file = e.target.files?.[0];
-            if (file) {
-              // Проверка размера (максимум 5 МБ)
-              if (file.size > 5 * 1024 * 1024) {
-                alert('Файл слишком большой! Максимальный размер 5 МБ');
-                e.target.value = '';
-                return;
-              }
-              console.log('Файл выбран:', file.name);
-              // Здесь позже добавим логику загрузки файла
-            }
-          }}
-          className="w-full text-gray-700 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer"
-        />
-        <p className="text-xs text-gray-500 mt-1">
-          Допустимые форматы: PDF, JPG, PNG, DOC. Максимум 5 МБ
-        </p>
-      </div>
-      {/* ===== КОНЕЦ БЛОКА ===== */}
-
-
-          <button 
-            type="submit"
-            disabled={isSubmitting}
-            className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white rounded-xl py-4 px-6 transition-all shadow-lg hover:shadow-xl hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-          >
-            {isSubmitting ? (
+            {isAuthenticated ? (
               <>
-                <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-                Отправка...
-              </>
-            ) : (
-              'Отправить обращение'
-            )}
-          </button>
-        </form>
-      </div>
-    )}
+                {/* Форма создания обращения - только для user и admin */}
+                {userPermissions.canCreateAppeal && (
+                  <div className="flex justify-center">
+                    <form onSubmit={handleSubmit} className="mb-6 w-full max-w-md">
+                      <textarea
+                        value={appeal}
+                        onChange={(e) => setAppeal(e.target.value)}
+                        placeholder="Опишите вашу проблему..."
+                        className="w-full min-h-[200px] mb-4 bg-white border-2 border-gray-200 rounded-xl p-4 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200 transition-all resize-none text-gray-700"
+                        required
+                        disabled={isSubmitting}
+                      />
+                      
+                      {/* ===== БЛОК ДЛЯ ЗАГРУЗКИ ФАЙЛА ===== */}
+                      <div className="mb-4">
+                        <label className="block text-gray-700 mb-2 text-sm font-medium">
+                          📎 Прикрепить файл (необязательно)
+                        </label>
+                        <input
+                          type="file"
+                          accept=".jpg,.jpeg,.png,.pdf,.doc,.docx"
+                          onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
+                          className="w-full text-gray-700 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer"
+                          disabled={isSubmitting}
+                        />
+                        <p className="text-xs text-gray-500 mt-1">
+                          Допустимые форматы: JPG, PNG, PDF, DOC. Максимум 5 МБ
+                        </p>
+                        {selectedFile && (
+                          <p className="text-xs text-green-600 mt-1">
+                            ✅ Выбран файл: {selectedFile.name} ({(selectedFile.size / 1024).toFixed(1)} КБ)
+                          </p>
+                        )}
+                      </div>
+                      {/* ===== КОНЕЦ БЛОКА ===== */}
+                      
+                      <button 
+                        type="submit"
+                        disabled={isSubmitting}
+                        className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white rounded-xl py-4 px-6 transition-all shadow-lg hover:shadow-xl hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                      >
+                        {isSubmitting ? (
+                          <>
+                            <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            Отправка...
+                          </>
+                        ) : (
+                          'Отправить обращение'
+                        )}
+                      </button>
+                    </form>
+                  </div>
+                )}
 
-    {/* Для гостя показываем информационное сообщение */}
-    {currentRole === 'guest' && (
-      <div className="flex justify-center">
-        <div className="w-full max-w-md bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-6 rounded-r-lg">
-          <div className="flex">
-            <div className="flex-shrink-0">
-              <svg className="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-              </svg>
-            </div>
-            <div className="ml-3">
-              <p className="text-sm text-yellow-700">
-                Вы вошли как гость. Для создания обращений необходимо 
-                <button 
-                  onClick={() => navigate('registration')}
-                  className="text-blue-600 underline ml-1 hover:text-blue-800"
-                >
-                  зарегистрироваться
-                </button>
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-    )}
-
+                {/* Для гостя показываем информационное сообщение */}
+                {currentRole === 'guest' && (
+                  <div className="flex justify-center">
+                    <div className="w-full max-w-md bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-6 rounded-r-lg">
+                      <div className="flex">
+                        <div className="flex-shrink-0">
+                          <svg className="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
+                            <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                          </svg>
+                        </div>
+                        <div className="ml-3">
+                          <p className="text-sm text-yellow-700">
+                            Вы вошли как гость. Для создания обращений необходимо 
+                            <button 
+                              onClick={() => navigate('registration')}
+                              className="text-blue-600 underline ml-1 hover:text-blue-800"
+                            >
+                              зарегистрироваться
+                            </button>
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {/* Кнопки навигации */}
                 <div className="grid grid-cols-1 gap-2 mt-4">
-                  {/* Мои заявки - доступно user и admin */}
                   {userPermissions.canViewOwnAppeals && (
                     <button
                       onClick={() => navigate('history')}
-                      className="bg-blue-600 hover:bg-blue-700 text-black px-4 py-2 rounded-xl transition-all transform hover:scale-105 flex items-center justify-center gap-2"
+                      className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl transition-all transform hover:scale-105 flex items-center justify-center gap-2"
                     >
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="black">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
                         <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z" />
                         <path fillRule="evenodd" d="M4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm3 4a1 1 0 000 2h.01a1 1 0 100-2H7zm3 0a1 1 0 000 2h3a1 1 0 100-2h-3zm-3 4a1 1 0 100 2h.01a1 1 0 100-2H7zm3 0a1 1 0 100 2h3a1 1 0 100-2h-3z" clipRule="evenodd" />
                       </svg>
@@ -265,13 +261,12 @@ const handleSubmit = async (e: React.FormEvent) => {
                     </button>
                   )}
 
-                  {/* Все заявки - только для admin */}
                   {userPermissions.canViewAllAppeals && (
                     <button
                       onClick={() => {
                         alert('Просмотр всех заявок (только для админа)');
                       }}
-                      className="bg-blue-600 hover:bg-blue-700 text-black px-4 py-2 rounded-xl transition-all transform hover:scale-105 flex items-center justify-center gap-2"
+                      className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-xl transition-all transform hover:scale-105 flex items-center justify-center gap-2"
                     >
                       <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                         <path d="M5 3a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2V5a2 2 0 00-2-2H5zM5 11a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2v-2a2 2 0 00-2-2H5zM11 5a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V5zM11 13a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
@@ -280,11 +275,10 @@ const handleSubmit = async (e: React.FormEvent) => {
                     </button>
                   )}
 
-                  {/* Админ панель - только для admin */}
                   {userPermissions.canAccessAdminPanel && (
                     <button
                       onClick={() => setShowAdminPanel(!showAdminPanel)}
-                      className="bg-orange-600 hover:bg-orange-700 text-black px-4 py-3 rounded-xl transition-all transform hover:scale-105 flex items-center justify-center gap-2 md:col-span-2"
+                      className="bg-orange-600 hover:bg-orange-700 text-white px-4 py-3 rounded-xl transition-all transform hover:scale-105 flex items-center justify-center gap-2 md:col-span-2"
                     >
                       <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                         <path d="M10.394 2.08a1 1 0 00-.788 0l-7 3a1 1 0 000 1.84L5.25 8.051a.999.999 0 01.356-.257l4-1.714a1 1 0 11.788 1.838L7.667 9.088l1.94.831a1 1 0 00.787 0l7-3a1 1 0 000-1.838l-7-3zM3.31 9.397L5 10.12v4.102a8.969 8.969 0 00-1.05-.174 1 1 0 01-.89-.89 11.115 11.115 0 01.25-3.762zM9.3 16.573A9.026 9.026 0 007 14.935v-3.957l1.818.78a3 3 0 002.364 0l5.508-2.361a11.026 11.026 0 01.25 3.762 1 1 0 01-.89.89 8.968 8.968 0 00-5.35 2.524 1 1 0 01-1.4 0zM6 18a1 1 0 001-1v-2.065a8.935 8.935 0 00-2-.712V17a1 1 0 001 1z" />
@@ -316,7 +310,6 @@ const handleSubmit = async (e: React.FormEvent) => {
                   Регистрация
                 </button>
                 
-                {/* Кнопка гостевого входа */}
                 <div className="relative my-6">
                   <div className="absolute inset-0 flex items-center">
                     <div className="w-full border-t border-gray-300"></div>
@@ -337,9 +330,9 @@ const handleSubmit = async (e: React.FormEvent) => {
                     localStorage.setItem('role', 'guest');
                     localStorage.setItem('firstName', 'Гость');
                     localStorage.setItem('isGuest', 'true');
-                    window.location.reload(); // Простой способ обновить состояние
+                    window.location.reload();
                   }}
-                  className="w-full bg-gray-600 hover:bg-gray-700 text-black rounded-xl py-3 px-6 transition-all transform hover:scale-[1.02] flex items-center justify-center gap-2"
+                  className="w-full bg-gray-600 hover:bg-gray-700 text-white rounded-xl py-3 px-6 transition-all transform hover:scale-[1.02] flex items-center justify-center gap-2"
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                     <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
@@ -353,7 +346,7 @@ const handleSubmit = async (e: React.FormEvent) => {
             )}
           </div>
 
-          {/* Админ панель - показываем только для админа и если открыта */}
+          {/* Админ панель */}
           {currentRole === 'admin' && showAdminPanel && (
             <div className="animate-slideUp">
               <AdminPanel userData={userData} />
@@ -362,7 +355,6 @@ const handleSubmit = async (e: React.FormEvent) => {
         </div>
       </div>
 
-      {/* Добавляем стили для анимаций */}
       <style>{`
         @keyframes slideUp {
           from {
