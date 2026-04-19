@@ -1,8 +1,7 @@
-// frontend/src/components/HomePage.tsx
-
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { AdminPanel } from './AdminPanel';
 import { createRequest, uploadFile } from '../api';
+import { WeatherWidget } from './WeatherWidget';
 
 type Page = 'home' | 'registration' | 'login' | 'history' | 'success';
 
@@ -48,13 +47,39 @@ const permissions = {
 
 export function HomePage({ navigate, isAuthenticated, userData, logout, role }: HomePageProps) {
   const [appeal, setAppeal] = useState('');
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);  // <-- ДОБАВИТЬ ЭТУ СТРОКУ
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
   
   // Определяем текущую роль
   const currentRole = !isAuthenticated ? 'guest' : (role || userData?.role || 'guest');
   const userPermissions = permissions[currentRole as keyof typeof permissions] || permissions.guest;
+
+  // JSON-LD структурированные данные для SEO
+  useEffect(() => {
+    const script = document.createElement('script');
+    script.type = 'application/ld+json';
+    script.text = JSON.stringify({
+      "@context": "https://schema.org",
+      "@type": "GovernmentService",
+      "name": "Сервис обращений граждан",
+      "description": "Официальный сервис для подачи обращений граждан в государственные органы",
+      "provider": {
+        "@type": "GovernmentOrganization",
+        "name": "Администрация города"
+      },
+      "serviceType": "Citizen Appeal",
+      "availableChannel": {
+        "@type": "ServiceChannel",
+        "serviceUrl": "https://citizen-requests.ru"
+      }
+    });
+    document.head.appendChild(script);
+    
+    return () => {
+      document.head.removeChild(script);
+    };
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -86,7 +111,7 @@ export function HomePage({ navigate, isAuthenticated, userData, logout, role }: 
         const assignedDept = result.assigned_department || 'Общий отдел';
         
         setAppeal('');
-        setSelectedFile(null);  // очищаем выбранный файл
+        setSelectedFile(null);
         navigate('success', assignedDept);
       } catch (error) {
         console.error('Ошибка при создании обращения:', error);
@@ -176,7 +201,7 @@ export function HomePage({ navigate, isAuthenticated, userData, logout, role }: 
                         disabled={isSubmitting}
                       />
                       
-                      {/* ===== БЛОК ДЛЯ ЗАГРУЗКИ ФАЙЛА ===== */}
+                      {/* Блок для загрузки файла */}
                       <div className="mb-4">
                         <label className="block text-gray-700 mb-2 text-sm font-medium">
                           📎 Прикрепить файл (необязательно)
@@ -197,7 +222,6 @@ export function HomePage({ navigate, isAuthenticated, userData, logout, role }: 
                           </p>
                         )}
                       </div>
-                      {/* ===== КОНЕЦ БЛОКА ===== */}
                       
                       <button 
                         type="submit"
@@ -346,9 +370,14 @@ export function HomePage({ navigate, isAuthenticated, userData, logout, role }: 
             )}
           </div>
 
+          {/* Виджет погоды (сторонний API) */}
+          <div className="mt-4">
+            <WeatherWidget />
+          </div>
+
           {/* Админ панель */}
           {currentRole === 'admin' && showAdminPanel && (
-            <div className="animate-slideUp">
+            <div className="animate-slideUp mt-4">
               <AdminPanel userData={userData} />
             </div>
           )}

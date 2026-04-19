@@ -1,5 +1,3 @@
-// frontend/src/App.tsx
-
 import { useState, useEffect } from 'react';
 import { HomePage } from './components/HomePage';
 import { RegistrationPage } from './components/RegistrationPage';
@@ -18,12 +16,42 @@ interface UserData {
   role: string;
 }
 
+// Функция для обновления мета-тегов при смене страницы
+function updateMetaTags(page: Page) {
+  const titles = {
+    home: 'Главная - Сервис обращений граждан',
+    registration: 'Регистрация - Сервис обращений граждан',
+    login: 'Вход - Сервис обращений граждан',
+    history: 'История обращений - Сервис обращений граждан',
+    success: 'Обращение отправлено - Сервис обращений граждан'
+  };
+  
+  const descriptions = {
+    home: 'Подайте обращение в государственные органы. ЖКХ, транспорт, образование, здравоохранение - выберите тему и отправьте заявку.',
+    registration: 'Зарегистрируйтесь в сервисе обращений граждан. Быстрая регистрация по номеру телефона.',
+    login: 'Войдите в личный кабинет сервиса обращений граждан.',
+    history: 'Просмотр истории ваших обращений и отслеживание статуса.',
+    success: 'Ваше обращение успешно отправлено. Следите за статусом в истории.'
+  };
+  
+  document.title = titles[page];
+  const metaDescription = document.querySelector('meta[name="description"]');
+  if (metaDescription) {
+    metaDescription.setAttribute('content', descriptions[page]);
+  }
+}
+
 export default function App() {
   const [currentPage, setCurrentPage] = useState<Page>('home');
   const [selectedDepartment, setSelectedDepartment] = useState<string>('');
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [userData, setUserData] = useState<UserData | null>(null);
   const [role, setRole] = useState<string | null>(localStorage.getItem('role'));
+
+  // Обновляем мета-теги при смене страницы
+  useEffect(() => {
+    updateMetaTags(currentPage);
+  }, [currentPage]);
 
   // Слушаем событие принудительного выхода (при ошибке refresh токена)
   useEffect(() => {
