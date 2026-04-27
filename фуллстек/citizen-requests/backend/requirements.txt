@@ -5,3 +5,13 @@ scikit-learn
 joblib 
 sqlmodel 
 sqlalchemy 
+fastapi
+uvicorn
+sqlmodel
+python-jose[cryptography]
+passlib[bcrypt]
+python-multipart
+joblib
+scikit-learn
+boto3
+httpx
