@@ -1,0 +1,9 @@
+# Secrets
+.env
+
+# Docker
+*.log
+
+# IDE
+.vscode/
+.idea/
